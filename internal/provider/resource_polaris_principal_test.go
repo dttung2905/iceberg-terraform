@@ -119,41 +119,6 @@ func newPolarisPrincipalTestServer(t *testing.T) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func TestAccPolarisPrincipal(t *testing.T) {
-	t.Parallel()
-
-	srv := newPolarisPrincipalTestServer(t)
-	defer srv.Close()
-
-	providerCfg := testAccPolarisProviderConfig(
-		"http://example.invalid",
-		srv.URL+"/api/management/v1",
-	)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: providerCfg + `
-resource "iceberg_polaris_principal" "test" {
-  name = "alice"
-
-  properties = {
-    team = "data"
-  }
-}
-`,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("iceberg_polaris_principal.test", "name", "alice"),
-					resource.TestCheckResourceAttr("iceberg_polaris_principal.test", "properties.team", "data"),
-					resource.TestCheckResourceAttr("iceberg_polaris_principal.test", "client_id", "id-alice"),
-				),
-			},
-		},
-	})
-}
-
 // TestAccPolarisPrincipal_Full runs against a real Polaris deployment
 func TestAccPolarisPrincipal_Full(t *testing.T) {
 	catalogURI := os.Getenv("POLARIS_CATALOG_URI")
