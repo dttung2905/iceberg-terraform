@@ -56,11 +56,11 @@ func isPolarisNotFoundError(err error) bool {
 
 func (p *icebergProvider) newPolarisManagementClient() (*polarisManagementClient, error) {
 	if p.polaris == nil || p.polaris.managementURI == "" {
-		return nil, errors.New("polaris is not configured: set type = \"polaris\" and ensure polaris_management_uri is set or derivable from catalog_uri")
+		return nil, errors.New("polaris is not configured: set type = \"polaris\" and ensure polaris_settings.management_uri is set or derivable from catalog_uri")
 	}
 	u, err := url.Parse(p.polaris.managementURI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid polaris_management_uri %q: %w", p.polaris.managementURI, err)
+		return nil, fmt.Errorf("invalid polaris_settings.management_uri %q: %w", p.polaris.managementURI, err)
 	}
 
 	return &polarisManagementClient{
