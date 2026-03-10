@@ -89,10 +89,9 @@ func (p *icebergProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 				Description: "The type of catalog. Use 'rest' for a plain REST catalog, or 'polaris' for Polaris (REST catalog with Polaris management).",
 				Optional:    true,
 			},
-			"token": schema.StringAttribute{
-				Description: "The token to use for authentication.",
-				Optional:    true,
-				Sensitive:   true,
+			"token": schema.StringAttribute{Description: "The token to use for authentication.",
+				Optional:  true,
+				Sensitive: true,
 			},
 			"warehouse": schema.StringAttribute{
 				Description: "The warehouse to use for the Iceberg REST catalog. This will be passed as `warehouse` property in the catalog properties.",
