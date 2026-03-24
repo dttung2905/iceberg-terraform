@@ -42,7 +42,7 @@ jobs:
         go: [ '1.23.6', '1.24.9' ,'1.25.1']
         os: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Install Go
       uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
       with:
