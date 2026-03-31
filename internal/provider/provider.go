@@ -234,5 +234,6 @@ func (p *icebergProvider) Resources(_ context.Context) []func() resource.Resourc
 		NewTableResource,
 		NewPolarisPrincipalResource,
 		NewPolarisPrincipalRoleResource,
+		NewPolarisCatalogResource,
 	}
 }

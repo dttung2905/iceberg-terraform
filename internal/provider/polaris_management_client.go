@@ -244,3 +244,91 @@ func (c *polarisManagementClient) UpdatePrincipalRole(ctx context.Context, name 
 func (c *polarisManagementClient) DeletePrincipalRole(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/principal-roles/"+url.PathEscape(name), nil, nil, nil)
 }
+
+// polarisStorageConfigInfo matches the OpenAPI StorageConfigInfo discriminator union
+// (S3 / AZURE / GCS / FILE). See spec/polaris-management-service.yml (or upstream
+// https://github.com/apache/polaris/blob/main/spec/polaris-management-service.yml):
+//   - StorageConfigInfo (base: storageType, allowedLocations, storageName)
+//   - AwsStorageConfigInfo — storageType S3
+//   - AzureStorageConfigInfo — storageType AZURE
+//   - GcpStorageConfigInfo — storageType GCS
+//   - FileStorageConfigInfo — storageType FILE
+//
+// JSON uses camelCase (roleArn, tenantId, …); Terraform maps to snake_case in the catalog resource.
+type polarisStorageConfigInfo struct {
+	StorageType      string   `json:"storageType"`
+	AllowedLocations []string `json:"allowedLocations,omitempty"`
+	StorageName      string   `json:"storageName,omitempty"`
+	// AwsStorageConfigInfo (storageType S3)
+	RoleArn          *string  `json:"roleArn,omitempty"`
+	ExternalID       *string  `json:"externalId,omitempty"`
+	UserArn          *string  `json:"userArn,omitempty"`
+	CurrentKmsKey    *string  `json:"currentKmsKey,omitempty"`
+	AllowedKmsKeys   []string `json:"allowedKmsKeys,omitempty"`
+	Region           *string  `json:"region,omitempty"`
+	Endpoint         *string  `json:"endpoint,omitempty"`
+	StsEndpoint      *string  `json:"stsEndpoint,omitempty"`
+	StsUnavailable   *bool    `json:"stsUnavailable,omitempty"`
+	EndpointInternal *string  `json:"endpointInternal,omitempty"`
+	PathStyleAccess  *bool    `json:"pathStyleAccess,omitempty"`
+	KmsUnavailable   *bool    `json:"kmsUnavailable,omitempty"`
+	// AzureStorageConfigInfo (storageType AZURE)
+	TenantID           *string `json:"tenantId,omitempty"`
+	MultiTenantAppName *string `json:"multiTenantAppName,omitempty"`
+	ConsentURL         *string `json:"consentUrl,omitempty"`
+	Hierarchical       *bool   `json:"hierarchical,omitempty"`
+	// GcpStorageConfigInfo (storageType GCS)
+	GcsServiceAccount *string `json:"gcsServiceAccount,omitempty"`
+}
+
+// polarisCatalog matches the management API Catalog object for INTERNAL catalogs.
+type polarisCatalog struct {
+	Type                string                   `json:"type"`
+	Name                string                   `json:"name"`
+	Properties          map[string]string        `json:"properties"`
+	StorageConfigInfo   polarisStorageConfigInfo `json:"storageConfigInfo"`
+	EntityVersion       int64                    `json:"entityVersion,omitempty"`
+	CreateTimestamp     int64                    `json:"createTimestamp,omitempty"`
+	LastUpdateTimestamp int64                    `json:"lastUpdateTimestamp,omitempty"`
+}
+
+type polarisCreateCatalogRequest struct {
+	Catalog polarisCatalog `json:"catalog"`
+}
+
+type polarisUpdateCatalogRequest struct {
+	CurrentEntityVersion int64                     `json:"currentEntityVersion"`
+	Properties           map[string]string         `json:"properties,omitempty"`
+	StorageConfigInfo    *polarisStorageConfigInfo `json:"storageConfigInfo,omitempty"`
+}
+
+func (c *polarisManagementClient) CreateCatalog(ctx context.Context, req polarisCreateCatalogRequest) (*polarisCatalog, error) {
+	var out polarisCatalog
+	if err := c.do(ctx, http.MethodPost, "/catalogs", nil, req, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+func (c *polarisManagementClient) GetCatalog(ctx context.Context, name string) (*polarisCatalog, error) {
+	var out polarisCatalog
+	if err := c.do(ctx, http.MethodGet, "/catalogs/"+url.PathEscape(name), nil, nil, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+func (c *polarisManagementClient) UpdateCatalog(ctx context.Context, name string, req polarisUpdateCatalogRequest) (*polarisCatalog, error) {
+	var out polarisCatalog
+	if err := c.do(ctx, http.MethodPut, "/catalogs/"+url.PathEscape(name), nil, req, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+func (c *polarisManagementClient) DeleteCatalog(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/catalogs/"+url.PathEscape(name), nil, nil, nil)
+}
