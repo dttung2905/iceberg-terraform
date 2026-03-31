@@ -15,8 +15,6 @@
 
 .PHONY: test-integration test-integration-setup test-integration-exec test-integration-cleanup
 
-test-integration: test-integration-setup test-integration-exec test-integration-cleanup ## Run integration tests
-
 test-integration-setup: ## Start Docker services for integration tests
 	docker compose -f dev/docker-compose.yml kill
 	docker compose -f dev/docker-compose.yml rm -f
