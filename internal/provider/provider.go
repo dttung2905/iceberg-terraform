@@ -42,13 +42,11 @@ func New() func() provider.Provider {
 // polarisSettingsModel is the Terraform-facing shape of the nested polaris_settings block.
 type polarisSettingsModel struct {
 	ManagementURI types.String `tfsdk:"management_uri"`
-	CatalogName   types.String `tfsdk:"catalog_name"`
 }
 
 // polarisConfig holds Polaris-specific runtime configuration derived from polaris_settings.
 type polarisConfig struct {
 	managementURI string
-	catalogName   string
 }
 
 // icebergProvider is the provider implementation.
@@ -113,10 +111,6 @@ func (p *icebergProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 						Description: "The base URI for the Polaris Management API. If omitted, it will be derived from catalog_uri by appending '/api/management/v1'.",
 						Optional:    true,
 					},
-					"catalog_name": schema.StringAttribute{
-						Description: "Default Polaris catalog name for RBAC resources.",
-						Optional:    true,
-					},
 				},
 			},
 		},
@@ -156,9 +150,6 @@ func (p *icebergProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 		cfg := &polarisConfig{}
 		if data.PolarisSettings != nil {
-			if !data.PolarisSettings.CatalogName.IsNull() && !data.PolarisSettings.CatalogName.IsUnknown() {
-				cfg.catalogName = data.PolarisSettings.CatalogName.ValueString()
-			}
 			if !data.PolarisSettings.ManagementURI.IsNull() && !data.PolarisSettings.ManagementURI.IsUnknown() {
 				cfg.managementURI = strings.TrimRight(data.PolarisSettings.ManagementURI.ValueString(), "/")
 			}
@@ -242,5 +233,6 @@ func (p *icebergProvider) Resources(_ context.Context) []func() resource.Resourc
 		NewNamespaceResource,
 		NewTableResource,
 		NewPolarisPrincipalResource,
+		NewPolarisPrincipalRoleResource,
 	}
 }
