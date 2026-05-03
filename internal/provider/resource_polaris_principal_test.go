@@ -37,7 +37,6 @@ func testAccPolarisProviderConfigWithToken(catalogURI, managementURI, token stri
 	if token != "" {
 		tokenAttr = fmt.Sprintf("\n  token = %q", token)
 	}
-
 	return fmt.Sprintf(`
 provider "iceberg" {
   type        = "polaris"
