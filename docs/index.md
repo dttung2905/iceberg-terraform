@@ -27,7 +27,15 @@ description: |-
 
 Use Terraform to interact with Iceberg REST Catalog instances.
 
+## Data Sources
 
+- [iceberg_table](data-sources/table.md) — Read metadata for an existing table from the catalog.
+
+## Resources
+
+- [iceberg_namespace](resources/namespace.md) — Manage a catalog namespace.
+- [iceberg_table](resources/table.md) — Manage an Iceberg table.
+- [iceberg_polaris_principal](resources/polaris_principal.md) — Manage a Polaris principal (Polaris deployments).
 
 ## Schema
 
