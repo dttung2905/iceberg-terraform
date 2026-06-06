@@ -38,6 +38,8 @@ resource "iceberg_table" "example" {
 }
 
 data "iceberg_table" "example" {
+  depends_on = [iceberg_table.example]
+
   namespace = iceberg_namespace.example.name
   name      = iceberg_table.example.name
 }

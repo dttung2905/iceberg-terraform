@@ -24,7 +24,6 @@ import (
 	"github.com/apache/iceberg-go"
 	"github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/table"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -32,7 +31,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -92,98 +90,19 @@ func (r *icebergTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			"schema": rscschema.SingleNestedAttribute{
 				Description: "The schema of the table.",
 				Required:    true,
-				Attributes: map[string]rscschema.Attribute{
-					"id": rscschema.Int64Attribute{
-						Description: "The schema ID.",
-						Optional:    true,
-						Computed:    true,
-					},
-					"fields": rscschema.ListNestedAttribute{
-						Description: "The fields of the schema",
-						Required:    true,
-						NestedObject: rscschema.NestedAttributeObject{
-							Attributes: schemaFieldAttributes(4),
-						},
-					},
-				},
+				Attributes:  tableSchemaResourceAttributes(),
 			},
 			"partition_spec": rscschema.SingleNestedAttribute{
 				Description: "The partition spec of the table.",
 				Optional:    true,
 				Computed:    true,
-				Attributes: map[string]rscschema.Attribute{
-					"spec_id": rscschema.Int64Attribute{
-						Description: "The partition spec ID.",
-						Computed:    true,
-					},
-					"fields": rscschema.ListNestedAttribute{
-						Description: "The fields of the partition spec.",
-						Required:    true,
-						NestedObject: rscschema.NestedAttributeObject{
-							Attributes: map[string]rscschema.Attribute{
-								"source_ids": rscschema.ListAttribute{
-									Description: "The source field IDs.",
-									Required:    true,
-									ElementType: types.Int64Type,
-								},
-								"field_id": rscschema.Int64Attribute{
-									Description: "The partition field ID.",
-									Optional:    true,
-									Computed:    true,
-								},
-								"name": rscschema.StringAttribute{
-									Description: "The partition field name.",
-									Required:    true,
-								},
-								"transform": rscschema.StringAttribute{
-									Description: "The partition transform.",
-									Required:    true,
-								},
-							},
-						},
-					},
-				},
+				Attributes:  tablePartitionSpecResourceAttributes(),
 			},
 			"sort_order": rscschema.SingleNestedAttribute{
 				Description: "The sort order of the table.",
 				Optional:    true,
 				Computed:    true,
-				Attributes: map[string]rscschema.Attribute{
-					"order_id": rscschema.Int64Attribute{
-						Description: "The sort order ID.",
-						Computed:    true,
-					},
-					"fields": rscschema.ListNestedAttribute{
-						Description: "The fields of the sort order.",
-						Required:    true,
-						NestedObject: rscschema.NestedAttributeObject{
-							Attributes: map[string]rscschema.Attribute{
-								"source_id": rscschema.Int64Attribute{
-									Description: "The source field ID.",
-									Required:    true,
-								},
-								"transform": rscschema.StringAttribute{
-									Description: "The sort transform.",
-									Required:    true,
-								},
-								"direction": rscschema.StringAttribute{
-									Description: "The sort direction (asc or desc).",
-									Required:    true,
-									Validators: []validator.String{
-										stringvalidator.OneOf("asc", "desc"),
-									},
-								},
-								"null_order": rscschema.StringAttribute{
-									Description: "The null order (nulls-first or nulls-last).",
-									Required:    true,
-									Validators: []validator.String{
-										stringvalidator.OneOf("nulls-first", "nulls-last"),
-									},
-								},
-							},
-						},
-					},
-				},
+				Attributes:  tableSortOrderResourceAttributes(),
 			},
 			"user_properties": rscschema.MapAttribute{
 				Description: "User-defined properties for the table.",
@@ -197,108 +116,6 @@ func (r *icebergTableResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 		},
 	}
-}
-
-func schemaFieldAttributes(depth int) map[string]rscschema.Attribute {
-	attrs := map[string]rscschema.Attribute{
-		"id": rscschema.Int64Attribute{
-			Description: "The field ID.",
-			Optional:    true,
-		},
-		"name": rscschema.StringAttribute{
-			Description: "The field name.",
-			Required:    true,
-		},
-		"type": rscschema.StringAttribute{
-			Description: "The field type (e.g., 'int', 'string', 'decimal(10,2)', 'struct'). For struct, use struct_properties.",
-			Required:    true,
-		},
-		"required": rscschema.BoolAttribute{
-			Description: "Whether the field is required.",
-			Required:    true,
-		},
-		"doc": rscschema.StringAttribute{
-			Description: "The field documentation.",
-			Optional:    true,
-		},
-		"list_properties": rscschema.SingleNestedAttribute{
-			Description: "Properties for list type.",
-			Optional:    true,
-			Attributes: map[string]rscschema.Attribute{
-				"element_id": rscschema.Int64Attribute{
-					Description: "The list element id.",
-					Required:    true,
-				},
-				"element_type": rscschema.StringAttribute{
-					Description: "The list element type.",
-					Required:    true,
-				},
-				"element_required": rscschema.BoolAttribute{
-					Description: "Whether the list element is required.",
-					Required:    true,
-				},
-			},
-		},
-		"map_properties": rscschema.SingleNestedAttribute{
-			Description: "Properties for map type.",
-			Optional:    true,
-			Attributes: map[string]rscschema.Attribute{
-				"key_id": rscschema.Int64Attribute{
-					Description: "The map key id.",
-					Required:    true,
-				},
-				"key_type": rscschema.StringAttribute{
-					Description: "The map key type.",
-					Required:    true,
-				},
-				"value_id": rscschema.Int64Attribute{
-					Description: "The map value id.",
-					Required:    true,
-				},
-				"value_type": rscschema.StringAttribute{
-					Description: "The map value type.",
-					Required:    true,
-				},
-				"value_required": rscschema.BoolAttribute{
-					Description: "Whether the map value is required.",
-					Required:    true,
-				},
-			},
-		},
-	}
-
-	if depth > 0 {
-		attrs["struct_properties"] = rscschema.SingleNestedAttribute{
-			Description: "Properties for struct type.",
-			Optional:    true,
-			Attributes: map[string]rscschema.Attribute{
-				"fields": rscschema.ListNestedAttribute{
-					Description: "The fields of the struct.",
-					Required:    true,
-					NestedObject: rscschema.NestedAttributeObject{
-						Attributes: schemaFieldAttributes(depth - 1),
-					},
-				},
-			},
-		}
-	} else {
-		// At max depth, we still need the attribute defined but it won't have fields
-		attrs["struct_properties"] = rscschema.SingleNestedAttribute{
-			Description: "Properties for struct type.",
-			Optional:    true,
-			Attributes: map[string]rscschema.Attribute{
-				"fields": rscschema.ListNestedAttribute{
-					Description: "The fields of the struct.",
-					Required:    true,
-					NestedObject: rscschema.NestedAttributeObject{
-						Attributes: map[string]rscschema.Attribute{},
-					},
-				},
-			},
-		}
-	}
-
-	return attrs
 }
 
 func (r *icebergTableResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

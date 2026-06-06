@@ -22,11 +22,9 @@ import (
 	"strings"
 
 	"github.com/apache/iceberg-go/catalog"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	dschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -76,94 +74,17 @@ func (d *icebergTableDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 			"schema": dschema.SingleNestedAttribute{
 				Description: "The current schema of the table.",
 				Computed:    true,
-				Attributes: map[string]dschema.Attribute{
-					"id": dschema.Int64Attribute{
-						Description: "The schema ID.",
-						Computed:    true,
-					},
-					"fields": dschema.ListNestedAttribute{
-						Description: "The fields of the schema.",
-						Computed:    true,
-						NestedObject: dschema.NestedAttributeObject{
-							Attributes: dataSourceSchemaFieldAttributes(4),
-						},
-					},
-				},
+				Attributes:  tableSchemaDataSourceAttributes(),
 			},
 			"partition_spec": dschema.SingleNestedAttribute{
-				Description: "The partition spec of the table; null when unpartitioned.",
+				Description: "The partition spec of the table; fields is empty when unpartitioned.",
 				Computed:    true,
-				Attributes: map[string]dschema.Attribute{
-					"spec_id": dschema.Int64Attribute{
-						Description: "The partition spec ID.",
-						Computed:    true,
-					},
-					"fields": dschema.ListNestedAttribute{
-						Description: "The fields of the partition spec.",
-						Computed:    true,
-						NestedObject: dschema.NestedAttributeObject{
-							Attributes: map[string]dschema.Attribute{
-								"source_ids": dschema.ListAttribute{
-									Description: "The source field IDs.",
-									Computed:    true,
-									ElementType: types.Int64Type,
-								},
-								"field_id": dschema.Int64Attribute{
-									Description: "The partition field ID.",
-									Computed:    true,
-								},
-								"name": dschema.StringAttribute{
-									Description: "The partition field name.",
-									Computed:    true,
-								},
-								"transform": dschema.StringAttribute{
-									Description: "The partition transform.",
-									Computed:    true,
-								},
-							},
-						},
-					},
-				},
+				Attributes:  tablePartitionSpecDataSourceAttributes(),
 			},
 			"sort_order": dschema.SingleNestedAttribute{
-				Description: "The sort order of the table; null when unsorted.",
+				Description: "The sort order of the table; fields is empty when unsorted.",
 				Computed:    true,
-				Attributes: map[string]dschema.Attribute{
-					"order_id": dschema.Int64Attribute{
-						Description: "The sort order ID.",
-						Computed:    true,
-					},
-					"fields": dschema.ListNestedAttribute{
-						Description: "The fields of the sort order.",
-						Computed:    true,
-						NestedObject: dschema.NestedAttributeObject{
-							Attributes: map[string]dschema.Attribute{
-								"source_id": dschema.Int64Attribute{
-									Description: "The source field ID.",
-									Computed:    true,
-								},
-								"transform": dschema.StringAttribute{
-									Description: "The sort transform.",
-									Computed:    true,
-								},
-								"direction": dschema.StringAttribute{
-									Description: "The sort direction (asc or desc).",
-									Computed:    true,
-									Validators: []validator.String{
-										stringvalidator.OneOf("asc", "desc"),
-									},
-								},
-								"null_order": dschema.StringAttribute{
-									Description: "The null order (nulls-first or nulls-last).",
-									Computed:    true,
-									Validators: []validator.String{
-										stringvalidator.OneOf("nulls-first", "nulls-last"),
-									},
-								},
-							},
-						},
-					},
-				},
+				Attributes:  tableSortOrderDataSourceAttributes(),
 			},
 			"server_properties": dschema.MapAttribute{
 				Description: "Properties from table metadata as returned by the catalog.",
@@ -172,107 +93,6 @@ func (d *icebergTableDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 			},
 		},
 	}
-}
-
-func dataSourceSchemaFieldAttributes(depth int) map[string]dschema.Attribute {
-	attrs := map[string]dschema.Attribute{
-		"id": dschema.Int64Attribute{
-			Description: "The field ID.",
-			Computed:    true,
-		},
-		"name": dschema.StringAttribute{
-			Description: "The field name.",
-			Computed:    true,
-		},
-		"type": dschema.StringAttribute{
-			Description: "The field type (e.g., 'int', 'string', 'decimal(10,2)', 'struct'). For struct, use struct_properties.",
-			Computed:    true,
-		},
-		"required": dschema.BoolAttribute{
-			Description: "Whether the field is required.",
-			Computed:    true,
-		},
-		"doc": dschema.StringAttribute{
-			Description: "The field documentation.",
-			Computed:    true,
-		},
-		"list_properties": dschema.SingleNestedAttribute{
-			Description: "Properties for list type.",
-			Computed:    true,
-			Attributes: map[string]dschema.Attribute{
-				"element_id": dschema.Int64Attribute{
-					Description: "The list element id.",
-					Computed:    true,
-				},
-				"element_type": dschema.StringAttribute{
-					Description: "The list element type.",
-					Computed:    true,
-				},
-				"element_required": dschema.BoolAttribute{
-					Description: "Whether the list element is required.",
-					Computed:    true,
-				},
-			},
-		},
-		"map_properties": dschema.SingleNestedAttribute{
-			Description: "Properties for map type.",
-			Computed:    true,
-			Attributes: map[string]dschema.Attribute{
-				"key_id": dschema.Int64Attribute{
-					Description: "The map key id.",
-					Computed:    true,
-				},
-				"key_type": dschema.StringAttribute{
-					Description: "The map key type.",
-					Computed:    true,
-				},
-				"value_id": dschema.Int64Attribute{
-					Description: "The map value id.",
-					Computed:    true,
-				},
-				"value_type": dschema.StringAttribute{
-					Description: "The map value type.",
-					Computed:    true,
-				},
-				"value_required": dschema.BoolAttribute{
-					Description: "Whether the map value is required.",
-					Computed:    true,
-				},
-			},
-		},
-	}
-
-	if depth > 0 {
-		attrs["struct_properties"] = dschema.SingleNestedAttribute{
-			Description: "Properties for struct type.",
-			Computed:    true,
-			Attributes: map[string]dschema.Attribute{
-				"fields": dschema.ListNestedAttribute{
-					Description: "The fields of the struct.",
-					Computed:    true,
-					NestedObject: dschema.NestedAttributeObject{
-						Attributes: dataSourceSchemaFieldAttributes(depth - 1),
-					},
-				},
-			},
-		}
-	} else {
-		attrs["struct_properties"] = dschema.SingleNestedAttribute{
-			Description: "Properties for struct type.",
-			Computed:    true,
-			Attributes: map[string]dschema.Attribute{
-				"fields": dschema.ListNestedAttribute{
-					Description: "The fields of the struct.",
-					Computed:    true,
-					NestedObject: dschema.NestedAttributeObject{
-						Attributes: map[string]dschema.Attribute{},
-					},
-				},
-			},
-		}
-	}
-
-	return attrs
 }
 
 func (d *icebergTableDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -340,6 +160,15 @@ func (d *icebergTableDataSource) Read(ctx context.Context, req datasource.ReadRe
 		resp.Diagnostics.AddError(
 			"Catalog not available",
 			"The catalog could not be created (is catalog_uri set?).",
+		)
+
+		return
+	}
+
+	if data.Name.IsNull() || data.Name.IsUnknown() {
+		resp.Diagnostics.AddError(
+			"Invalid table name",
+			"The name attribute must be set to a non-null, known value.",
 		)
 
 		return
