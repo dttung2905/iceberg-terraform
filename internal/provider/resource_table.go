@@ -590,7 +590,7 @@ func (r *icebergTableResource) calculateSortOrderUpdates(ctx context.Context, pl
 
 func (r *icebergTableResource) syncTableToModel(ctx context.Context, tbl *table.Table, model *icebergTableResourceModel, diags *diag.Diagnostics) {
 	meta := icebergTableMetadataFields{}
-	syncIcebergTableMetadataToModel(ctx, tbl, &meta, diags)
+	convertIcebergTableMetadataToModel(ctx, tbl, &meta, diags)
 	if diags.HasError() {
 		return
 	}

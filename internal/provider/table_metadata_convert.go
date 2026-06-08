@@ -23,7 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// icebergTableMetadataFields holds Terraform values synced from an Iceberg table's metadata
+// icebergTableMetadataFields holds Terraform values converted from an Iceberg table's metadata
 // (schema, partition spec, sort order, properties). Used by the table resource and table data source.
 type icebergTableMetadataFields struct {
 	Schema           types.Object
@@ -32,7 +32,7 @@ type icebergTableMetadataFields struct {
 	ServerProperties types.Map
 }
 
-func syncIcebergTableMetadataToModel(ctx context.Context, tbl *table.Table, out *icebergTableMetadataFields, diags *diag.Diagnostics) {
+func convertIcebergTableMetadataToModel(ctx context.Context, tbl *table.Table, out *icebergTableMetadataFields, diags *diag.Diagnostics) {
 	serverProperties, d := types.MapValueFrom(ctx, types.StringType, tbl.Properties())
 	diags.Append(d...)
 	if diags.HasError() {

@@ -201,7 +201,7 @@ func (d *icebergTableDataSource) Read(ctx context.Context, req datasource.ReadRe
 	data.ID = types.StringValue(strings.Join(tableIdent, "."))
 
 	meta := icebergTableMetadataFields{}
-	syncIcebergTableMetadataToModel(ctx, tbl, &meta, &resp.Diagnostics)
+	convertIcebergTableMetadataToModel(ctx, tbl, &meta, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
