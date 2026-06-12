@@ -19,12 +19,17 @@
 
 This [Terraform](https://terraform.io) and [OpenTofu](https://www.opentofu.org/) provider allows you to manage Iceberg resources, such as namespaces and tables.
 
-## Supported Resources
+## Supported Data Sources
 
-The provider currently supports the following resources:
+- `iceberg_table`: Read metadata for an existing table (schema, partition spec, sort order, and catalog properties).
+
+## Supported Resources
 
 - `iceberg_namespace`: Manage Iceberg namespaces and their properties.
 - `iceberg_table`: Manage Iceberg tables, including schema definitions and properties.
+- `iceberg_polaris_principal`: Manage Polaris principals and client credentials (when using a Polaris catalog).
+
+See the [provider documentation](docs/index.md) for examples and attribute reference.
 
 ## Local Development
 
