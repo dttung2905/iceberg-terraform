@@ -15,12 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 ---
-files: ^go/
-
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+  - repo: https://github.com/golangci/golangci-lint
+    rev: c0d3ddc9cf3faa61a4e378e879ece580256d76e5 # frozen: v2.12.2
     hooks:
       - id: golangci-lint
-        entry: bash -c 'cd iceberg && golangci-lint run --fix --timeout 5m'
-        types_or: [go]
+        args: [--fix, --timeout=5m]
+        types_or: [go, go-mod]
