@@ -169,7 +169,10 @@ func (d *icebergNamespaceDataSource) Read(ctx context.Context, req datasource.Re
 
 			return
 		}
-		resp.Diagnostics.AddError("failed to load namespace", err.Error())
+		resp.Diagnostics.AddError(
+			"failed to load namespace",
+			"namespace "+strings.Join(namespaceIdent, ".")+": "+err.Error(),
+		)
 
 		return
 	}
