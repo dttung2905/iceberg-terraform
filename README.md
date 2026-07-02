@@ -21,6 +21,7 @@ This [Terraform](https://terraform.io) and [OpenTofu](https://www.opentofu.org/)
 
 ## Supported Data Sources
 
+- `iceberg_namespace`: Read metadata for an existing namespace (catalog properties).
 - `iceberg_table`: Read metadata for an existing table (schema, partition spec, sort order, and catalog properties).
 
 ## Supported Resources

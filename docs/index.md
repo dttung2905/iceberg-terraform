@@ -29,6 +29,7 @@ Use Terraform to interact with Iceberg REST Catalog instances.
 
 ## Data Sources
 
+- [iceberg_namespace](data-sources/namespace.md) — Read metadata for an existing namespace from the catalog.
 - [iceberg_table](data-sources/table.md) — Read metadata for an existing table from the catalog.
 
 ## Resources
