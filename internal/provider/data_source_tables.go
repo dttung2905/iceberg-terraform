@@ -144,11 +144,8 @@ func sortTableIdentifiers(identifiers []table.Identifier) {
 }
 
 func tableNamesFromIdentifiers(identifiers []table.Identifier) []string {
-	sorted := append([]table.Identifier(nil), identifiers...)
-	sortTableIdentifiers(sorted)
-
-	names := make([]string, 0, len(sorted))
-	for _, ident := range sorted {
+	names := make([]string, 0, len(identifiers))
+	for _, ident := range identifiers {
 		names = append(names, catalog.TableNameFromIdent(ident))
 	}
 
@@ -156,11 +153,8 @@ func tableNamesFromIdentifiers(identifiers []table.Identifier) []string {
 }
 
 func tableIdentifierStrings(identifiers []table.Identifier) []string {
-	sorted := append([]table.Identifier(nil), identifiers...)
-	sortTableIdentifiers(sorted)
-
-	out := make([]string, 0, len(sorted))
-	for _, ident := range sorted {
+	out := make([]string, 0, len(identifiers))
+	for _, ident := range identifiers {
 		out = append(out, identifierString(ident))
 	}
 
@@ -224,6 +218,7 @@ func (d *icebergTablesDataSource) Read(ctx context.Context, req datasource.ReadR
 		tableIdents = append(tableIdents, ident)
 	}
 
+	sortTableIdentifiers(tableIdents)
 	tableNames := tableNamesFromIdentifiers(tableIdents)
 	identifierStrings := tableIdentifierStrings(tableIdents)
 

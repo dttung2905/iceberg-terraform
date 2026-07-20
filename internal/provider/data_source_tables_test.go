@@ -34,6 +34,27 @@ func TestIdentifierString(t *testing.T) {
 	assert.Equal(t, "", identifierString(nil))
 }
 
+func TestSortTableIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	ids := []table.Identifier{
+		{"analytics", "raw", "orders"},
+		{"analytics", "raw", "events"},
+		{"ns", "b"},
+		{"ns", "a"},
+		{"ns", "a"},
+	}
+	sortTableIdentifiers(ids)
+
+	assert.Equal(t, []table.Identifier{
+		{"analytics", "raw", "events"},
+		{"analytics", "raw", "orders"},
+		{"ns", "a"},
+		{"ns", "a"},
+		{"ns", "b"},
+	}, ids)
+}
+
 func TestTableNamesFromIdentifiers(t *testing.T) {
 	t.Parallel()
 
@@ -53,26 +74,17 @@ func TestTableNamesFromIdentifiers(t *testing.T) {
 			want: []string{"events"},
 		},
 		{
-			name: "multiple tables sorted alphabetically",
+			name: "preserves caller order",
 			ids: []table.Identifier{
 				{"analytics", "raw", "orders"},
 				{"analytics", "raw", "events"},
 			},
-			want: []string{"events", "orders"},
+			want: []string{"orders", "events"},
 		},
 		{
 			name: "nested namespace",
 			ids:  []table.Identifier{{"analytics", "prod", "metrics"}},
 			want: []string{"metrics"},
-		},
-		{
-			name: "stable sort preserves relative order for equal keys",
-			ids: []table.Identifier{
-				{"ns", "b"},
-				{"ns", "a"},
-				{"ns", "a"},
-			},
-			want: []string{"a", "a", "b"},
 		},
 	}
 
@@ -103,12 +115,12 @@ func TestTableIdentifierStrings(t *testing.T) {
 			want: []string{"db.events"},
 		},
 		{
-			name: "multiple tables sorted alphabetically",
+			name: "preserves caller order",
 			ids: []table.Identifier{
 				{"analytics", "raw", "orders"},
 				{"analytics", "raw", "events"},
 			},
-			want: []string{"analytics.raw.events", "analytics.raw.orders"},
+			want: []string{"analytics.raw.orders", "analytics.raw.events"},
 		},
 		{
 			name: "nested namespace",
@@ -123,6 +135,19 @@ func TestTableIdentifierStrings(t *testing.T) {
 			assert.Equal(t, tt.want, tableIdentifierStrings(tt.ids))
 		})
 	}
+}
+
+func TestSortedTableListOutputs(t *testing.T) {
+	t.Parallel()
+
+	ids := []table.Identifier{
+		{"analytics", "raw", "orders"},
+		{"analytics", "raw", "events"},
+	}
+	sortTableIdentifiers(ids)
+
+	assert.Equal(t, []string{"events", "orders"}, tableNamesFromIdentifiers(ids))
+	assert.Equal(t, []string{"analytics.raw.events", "analytics.raw.orders"}, tableIdentifierStrings(ids))
 }
 
 func TestAccIcebergTablesDataSource_Full(t *testing.T) {
@@ -189,6 +214,26 @@ func TestAccIcebergTablesDataSource_NotFound(t *testing.T) {
 			{
 				Config:      testAccIcebergTablesDataSourceMissingConfig(providerCfg),
 				ExpectError: regexp.MustCompile(`Namespace not found`),
+			},
+		},
+	})
+}
+
+func TestAccIcebergTablesDataSource_EmptyNamespaceAttribute(t *testing.T) {
+	catalogURI := os.Getenv("ICEBERG_CATALOG_URI")
+	if catalogURI == "" {
+		t.Skip("ICEBERG_CATALOG_URI not set, skipping tables data source E2E test")
+	}
+
+	providerCfg := fmt.Sprintf(providerConfig, catalogURI)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccIcebergTablesDataSourceEmptyNamespaceAttributeConfig(providerCfg),
+				ExpectError: regexp.MustCompile(`(?s)Invalid namespace.*at least one namespace segment`),
 			},
 		},
 	})
@@ -278,6 +323,14 @@ resource "iceberg_namespace" "db" {
 
 data "iceberg_tables" "read" {
   namespace = iceberg_namespace.db.name
+}
+`
+}
+
+func testAccIcebergTablesDataSourceEmptyNamespaceAttributeConfig(providerCfg string) string {
+	return providerCfg + `
+data "iceberg_tables" "empty_attr" {
+  namespace = []
 }
 `
 }
