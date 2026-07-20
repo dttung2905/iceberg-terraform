@@ -26,6 +26,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestIdentifierString(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "db.events", identifierString(table.Identifier{"db", "events"}))
+	assert.Equal(t, "analytics.raw.orders", identifierString(table.Identifier{"analytics", "raw", "orders"}))
+	assert.Equal(t, "", identifierString(nil))
+}
+
 func TestTableNamesFromIdentifiers(t *testing.T) {
 	t.Parallel()
 
@@ -56,6 +64,15 @@ func TestTableNamesFromIdentifiers(t *testing.T) {
 			name: "nested namespace",
 			ids:  []table.Identifier{{"analytics", "prod", "metrics"}},
 			want: []string{"metrics"},
+		},
+		{
+			name: "stable sort preserves relative order for equal keys",
+			ids: []table.Identifier{
+				{"ns", "b"},
+				{"ns", "a"},
+				{"ns", "a"},
+			},
+			want: []string{"a", "a", "b"},
 		},
 	}
 

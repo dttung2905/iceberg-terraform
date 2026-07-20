@@ -19,7 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/apache/iceberg-go/catalog"
@@ -128,9 +128,18 @@ func (d *icebergTablesDataSource) configureCatalog(ctx context.Context, diags *d
 	d.catalog = cat
 }
 
+// identifierString formats a table identifier as a dot-separated string.
+// table.Identifier is currently a []string alias with no String() method;
+// keep this helper so formatting stays in one place if that changes before v1.0.
+func identifierString(ident table.Identifier) string {
+	return strings.Join(ident, ".")
+}
+
 func sortTableIdentifiers(identifiers []table.Identifier) {
-	sort.Slice(identifiers, func(i, j int) bool {
-		return strings.Join(identifiers[i], ".") < strings.Join(identifiers[j], ".")
+	// Stable sort keeps list order deterministic across refreshes so Terraform
+	// does not report spurious diffs when the catalog returns tables unordered.
+	slices.SortStableFunc(identifiers, func(a, b table.Identifier) int {
+		return strings.Compare(identifierString(a), identifierString(b))
 	})
 }
 
@@ -152,7 +161,7 @@ func tableIdentifierStrings(identifiers []table.Identifier) []string {
 
 	out := make([]string, 0, len(sorted))
 	for _, ident := range sorted {
-		out = append(out, strings.Join(ident, "."))
+		out = append(out, identifierString(ident))
 	}
 
 	return out
@@ -203,7 +212,7 @@ func (d *icebergTablesDataSource) Read(ctx context.Context, req datasource.ReadR
 			if errors.Is(err, catalog.ErrNoSuchNamespace) {
 				resp.Diagnostics.AddError(
 					"Namespace not found",
-					"No such namespace: "+strings.Join(namespaceIdent, "."),
+					"No such namespace: "+identifierString(namespaceIdent),
 				)
 
 				return
@@ -230,7 +239,7 @@ func (d *icebergTablesDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
-	data.ID = types.StringValue(strings.Join(namespaceIdent, "."))
+	data.ID = types.StringValue(identifierString(namespaceIdent))
 	data.Tables = tables
 	data.Identifiers = identifiers
 
