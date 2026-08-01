@@ -119,8 +119,8 @@ func (d *icebergTablesDataSource) configureCatalog(ctx context.Context, diags *d
 	cat, err := d.provider.NewCatalog(ctx)
 	if err != nil {
 		diags.AddError(
-			"Failed to create catalog",
-			"Failed to create catalog: "+err.Error(),
+			"Failed to access catalog",
+			"Failed to access catalog: "+err.Error(),
 		)
 
 		return
