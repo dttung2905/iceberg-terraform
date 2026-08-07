@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 	"strings"
 
@@ -49,6 +50,14 @@ type icebergTablesDataSource struct {
 	provider *icebergProvider
 }
 
+var (
+	// errNamespaceNotFound is returned by collectListedTables only when
+	// ListTables fails with catalog.ErrNoSuchNamespace before yielding any
+	// identifiers. Mid-pagination 404s that wrap the same catalog sentinel
+	// must not use this error, so Read can keep the original diagnostic.
+	errNamespaceNotFound = errors.New("namespace not found")
+)
+
 func (d *icebergTablesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_tables"
 }
@@ -67,12 +76,12 @@ func (d *icebergTablesDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				ElementType: types.StringType,
 			},
 			"tables": dschema.ListAttribute{
-				Description: "Table names in the namespace, without namespace segments.",
+				Description: "Table names in the namespace, without namespace segments. Sorted alphabetically.",
 				Computed:    true,
 				ElementType: types.StringType,
 			},
 			"identifiers": dschema.ListAttribute{
-				Description: "Dot-separated full table identifiers (namespace segments + table name), matching iceberg_table id format.",
+				Description: "Dot-separated full table identifiers (namespace segments + table name), matching iceberg_table id format. Sorted alphabetically.",
 				Computed:    true,
 				ElementType: types.StringType,
 			},
@@ -161,6 +170,41 @@ func tableIdentifierStrings(identifiers []table.Identifier) []string {
 	return out
 }
 
+// collectListedTables consumes a ListTables iterator, enforcing that every
+// yielded identifier belongs to namespaceIdent (non-recursive listing).
+//
+// ErrNoSuchNamespace is only treated as a missing namespace when no identifiers
+// were yielded first. In iceberg-go's REST catalog, page-level HTTP 404s are
+// also wrapped with that sentinel, so a failure after partial results must
+// preserve the original error instead of reporting "Namespace not found".
+func collectListedTables(seq iter.Seq2[table.Identifier, error], namespaceIdent table.Identifier) ([]table.Identifier, error) {
+	var tableIdents []table.Identifier
+	for ident, err := range seq {
+		if err != nil {
+			if errors.Is(err, catalog.ErrNoSuchNamespace) && len(tableIdents) == 0 {
+				return nil, fmt.Errorf("%w: %s", errNamespaceNotFound, identifierString(namespaceIdent))
+			}
+
+			return nil, err
+		}
+
+		if len(ident) == 0 {
+			return nil, fmt.Errorf("catalog returned empty table identifier")
+		}
+		if !slices.Equal(catalog.NamespaceFromIdent(ident), namespaceIdent) {
+			return nil, fmt.Errorf(
+				"catalog returned table %q outside requested namespace %q",
+				identifierString(ident),
+				identifierString(namespaceIdent),
+			)
+		}
+
+		tableIdents = append(tableIdents, ident)
+	}
+
+	return tableIdents, nil
+}
+
 func (d *icebergTablesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	tflog.Info(ctx, "Reading iceberg_tables data source")
 	d.configureCatalog(ctx, &resp.Diagnostics)
@@ -200,22 +244,19 @@ func (d *icebergTablesDataSource) Read(ctx context.Context, req datasource.ReadR
 
 	namespaceIdent := catalog.ToIdentifier(namespaceName...)
 
-	var tableIdents []table.Identifier
-	for ident, err := range d.catalog.ListTables(ctx, namespaceIdent) {
-		if err != nil {
-			if errors.Is(err, catalog.ErrNoSuchNamespace) {
-				resp.Diagnostics.AddError(
-					"Namespace not found",
-					"No such namespace: "+identifierString(namespaceIdent),
-				)
-
-				return
-			}
-			resp.Diagnostics.AddError("failed to list tables", err.Error())
+	tableIdents, err := collectListedTables(d.catalog.ListTables(ctx, namespaceIdent), namespaceIdent)
+	if err != nil {
+		if errors.Is(err, errNamespaceNotFound) {
+			resp.Diagnostics.AddError(
+				"Namespace not found",
+				"No such namespace: "+identifierString(namespaceIdent),
+			)
 
 			return
 		}
-		tableIdents = append(tableIdents, ident)
+		resp.Diagnostics.AddError("failed to list tables", err.Error())
+
+		return
 	}
 
 	sortTableIdentifiers(tableIdents)

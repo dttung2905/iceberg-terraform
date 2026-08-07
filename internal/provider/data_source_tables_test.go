@@ -16,11 +16,14 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"regexp"
 	"testing"
 
+	"github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/table"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
@@ -150,6 +153,118 @@ func TestSortedTableListOutputs(t *testing.T) {
 	assert.Equal(t, []string{"analytics.raw.events", "analytics.raw.orders"}, tableIdentifierStrings(ids))
 }
 
+func listTablesSeq(yields []table.Identifier, finalErr error) iter.Seq2[table.Identifier, error] {
+	return func(yield func(table.Identifier, error) bool) {
+		for _, ident := range yields {
+			if !yield(ident, nil) {
+				return
+			}
+		}
+		if finalErr != nil {
+			yield(table.Identifier{}, finalErr)
+		}
+	}
+}
+
+func TestCollectListedTables(t *testing.T) {
+	t.Parallel()
+
+	ns := table.Identifier{"analytics", "raw"}
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := collectListedTables(listTablesSeq([]table.Identifier{
+			{"analytics", "raw", "orders"},
+			{"analytics", "raw", "events"},
+		}, nil), ns)
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.Equal(t, []table.Identifier{
+			{"analytics", "raw", "orders"},
+			{"analytics", "raw", "events"},
+		}, got)
+	})
+
+	t.Run("empty results", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := collectListedTables(listTablesSeq(nil, nil), ns)
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.Empty(t, got)
+	})
+
+	t.Run("first yield ErrNoSuchNamespace", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := collectListedTables(listTablesSeq(nil, catalog.ErrNoSuchNamespace), ns)
+		assert.Nil(t, got)
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.ErrorIs(t, err, errNamespaceNotFound)
+		assert.Contains(t, err.Error(), "analytics.raw")
+		// Catalog sentinel is intentionally not wrapped here; Read keys off
+		// errNamespaceNotFound so mid-pagination ErrNoSuchNamespace stays distinct.
+		assert.False(t, errors.Is(err, catalog.ErrNoSuchNamespace))
+	})
+
+	t.Run("generic error", func(t *testing.T) {
+		t.Parallel()
+
+		wantErr := errors.New("catalog unavailable")
+		got, err := collectListedTables(listTablesSeq(nil, wantErr), ns)
+		assert.Nil(t, got)
+		assert.ErrorIs(t, err, wantErr)
+	})
+
+	t.Run("error after partial results preserves cause", func(t *testing.T) {
+		t.Parallel()
+
+		// Mimics iceberg-go REST pagination: identifiers from page 1, then a
+		// page-level HTTP 404 wrapped as ErrNoSuchNamespace (e.g. bad page token).
+		pageErr := fmt.Errorf("NoSuchPageTokenException: %w", catalog.ErrNoSuchNamespace)
+		got, err := collectListedTables(listTablesSeq([]table.Identifier{
+			{"analytics", "raw", "events"},
+			{"analytics", "raw", "orders"},
+		}, pageErr), ns)
+		assert.Nil(t, got)
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.ErrorIs(t, err, catalog.ErrNoSuchNamespace)
+		assert.False(t, errors.Is(err, errNamespaceNotFound))
+		assert.Contains(t, err.Error(), "NoSuchPageTokenException")
+	})
+
+	t.Run("rejects empty identifier", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := collectListedTables(listTablesSeq([]table.Identifier{{}}, nil), ns)
+		assert.Nil(t, got)
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "empty table identifier")
+	})
+
+	t.Run("rejects identifier outside namespace", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := collectListedTables(listTablesSeq([]table.Identifier{
+			{"other", "ns", "events"},
+		}, nil), ns)
+		assert.Nil(t, got)
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), `outside requested namespace "analytics.raw"`)
+	})
+}
+
 func TestAccIcebergTablesDataSource_Full(t *testing.T) {
 	catalogURI := os.Getenv("ICEBERG_CATALOG_URI")
 	if catalogURI == "" {
@@ -157,40 +272,44 @@ func TestAccIcebergTablesDataSource_Full(t *testing.T) {
 	}
 
 	providerCfg := fmt.Sprintf(providerConfig, catalogURI)
+	suffix := resource.UniqueId()
+	basicNS := "ns_tables_ds_basic_" + suffix
+	nestedParent := "analytics_" + suffix
+	emptyNS := "ns_tables_ds_empty_" + suffix
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccIcebergTablesDataSourceBasicConfig(providerCfg),
+				Config: testAccIcebergTablesDataSourceBasicConfig(providerCfg, basicNS),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", "ns_tables_ds_basic"),
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "id", "ns_tables_ds_basic"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", basicNS),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "id", basicNS),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.#", "2"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.0", "alpha_table"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.1", "beta_table"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.#", "2"),
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.0", "ns_tables_ds_basic.alpha_table"),
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.1", "ns_tables_ds_basic.beta_table"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.0", basicNS+".alpha_table"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.1", basicNS+".beta_table"),
 				),
 			},
 			{
-				Config: testAccIcebergTablesDataSourceNestedConfig(providerCfg),
+				Config: testAccIcebergTablesDataSourceNestedConfig(providerCfg, nestedParent),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", "analytics"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", nestedParent),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.1", "raw"),
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "id", "analytics.raw"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "id", nestedParent+".raw"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.#", "1"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.0", "events"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.#", "1"),
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.0", "analytics.raw.events"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.0", nestedParent+".raw.events"),
 				),
 			},
 			{
-				Config: testAccIcebergTablesDataSourceEmptyNamespaceConfig(providerCfg),
+				Config: testAccIcebergTablesDataSourceEmptyNamespaceConfig(providerCfg, emptyNS),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", "ns_tables_ds_empty"),
+					resource.TestCheckResourceAttr("data.iceberg_tables.read", "namespace.0", emptyNS),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "tables.#", "0"),
 					resource.TestCheckResourceAttr("data.iceberg_tables.read", "identifiers.#", "0"),
 				),
@@ -206,13 +325,14 @@ func TestAccIcebergTablesDataSource_NotFound(t *testing.T) {
 	}
 
 	providerCfg := fmt.Sprintf(providerConfig, catalogURI)
+	missingNS := "ns_tables_ds_missing_" + resource.UniqueId()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:      testAccIcebergTablesDataSourceMissingConfig(providerCfg),
+				Config:      testAccIcebergTablesDataSourceMissingConfig(providerCfg, missingNS),
 				ExpectError: regexp.MustCompile(`Namespace not found`),
 			},
 		},
@@ -239,10 +359,10 @@ func TestAccIcebergTablesDataSource_EmptyNamespaceAttribute(t *testing.T) {
 	})
 }
 
-func testAccIcebergTablesDataSourceBasicConfig(providerCfg string) string {
-	return providerCfg + `
+func testAccIcebergTablesDataSourceBasicConfig(providerCfg, namespace string) string {
+	return providerCfg + fmt.Sprintf(`
 resource "iceberg_namespace" "db" {
-  name = ["ns_tables_ds_basic"]
+  name = [%q]
 }
 
 resource "iceberg_table" "alpha" {
@@ -283,13 +403,13 @@ data "iceberg_tables" "read" {
     iceberg_table.beta,
   ]
 }
-`
+`, namespace)
 }
 
-func testAccIcebergTablesDataSourceNestedConfig(providerCfg string) string {
-	return providerCfg + `
+func testAccIcebergTablesDataSourceNestedConfig(providerCfg, parentNS string) string {
+	return providerCfg + fmt.Sprintf(`
 resource "iceberg_namespace" "db" {
-  name = ["analytics", "raw"]
+  name = [%q, "raw"]
 }
 
 resource "iceberg_table" "events" {
@@ -312,19 +432,19 @@ data "iceberg_tables" "read" {
 
   depends_on = [iceberg_table.events]
 }
-`
+`, parentNS)
 }
 
-func testAccIcebergTablesDataSourceEmptyNamespaceConfig(providerCfg string) string {
-	return providerCfg + `
+func testAccIcebergTablesDataSourceEmptyNamespaceConfig(providerCfg, namespace string) string {
+	return providerCfg + fmt.Sprintf(`
 resource "iceberg_namespace" "db" {
-  name = ["ns_tables_ds_empty"]
+  name = [%q]
 }
 
 data "iceberg_tables" "read" {
   namespace = iceberg_namespace.db.name
 }
-`
+`, namespace)
 }
 
 func testAccIcebergTablesDataSourceEmptyNamespaceAttributeConfig(providerCfg string) string {
@@ -335,10 +455,10 @@ data "iceberg_tables" "empty_attr" {
 `
 }
 
-func testAccIcebergTablesDataSourceMissingConfig(providerCfg string) string {
-	return providerCfg + `
+func testAccIcebergTablesDataSourceMissingConfig(providerCfg, namespace string) string {
+	return providerCfg + fmt.Sprintf(`
 data "iceberg_tables" "missing" {
-  namespace = ["definitely_no_such_namespace"]
+  namespace = [%q]
 }
-`
+`, namespace)
 }

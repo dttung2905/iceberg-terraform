@@ -137,4 +137,5 @@ data "iceberg_tables" "example" {
 ## Error handling
 
 - If the namespace does not exist, apply fails with a **Namespace not found** error.
+- If listing fails for another reason (including a mid-pagination catalog error), apply fails with **failed to list tables** and the underlying catalog message.
 - If `catalog_uri` is not configured on the provider, apply fails with **Catalog not available**.
